@@ -3,13 +3,6 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const subscriptionUrls = [
-  'https://txt.gt.tc/users/HKTV.txt',
-  'https://tmxk.pp.ua/smart-cn.m3u',
-  'https://tmxk.pp.ua/4gtv-cn.m3u',
-  'https://gh-proxy.com/https://raw.githubusercontent.com/develop202/migu_video/refs/heads/main/interface.txt'
-];
-
 const channelJsonPath = path.join(__dirname, 'channel.json');
 const outputJsonPath = path.join(__dirname, 'output.json');
 
@@ -57,6 +50,32 @@ function parseM3U(content) {
             channels[channelName] = [];
           }
           channels[channelName].push(nextLine);
+        }
+      }
+    }
+  }
+  
+  return channels;
+}
+
+function parseTXT(content) {
+  const channels = {};
+  const lines = content.split('\n');
+  
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    
+    if (trimmedLine.includes(',') && !trimmedLine.startsWith('#')) {
+      const parts = trimmedLine.split(',');
+      if (parts.length >= 2) {
+        const channelName = parts[0].trim();
+        const url = parts.slice(1).join(',').trim();
+        
+        if (channelName && url && url.startsWith('http')) {
+          if (!channels[channelName]) {
+            channels[channelName] = [];
+          }
+          channels[channelName].push(url);
         }
       }
     }
@@ -144,6 +163,12 @@ async function main() {
   try {
     console.log('读取频道配置文件...');
     const channelData = JSON.parse(fs.readFileSync(channelJsonPath, 'utf8'));
+    const subscriptionUrls = channelData.subscription_urls || [];
+    
+    if (subscriptionUrls.length === 0) {
+      console.log('未找到订阅地址');
+      process.exit(0);
+    }
     
     console.log('获取订阅地址内容...');
     const allM3UChannels = {};
@@ -152,7 +177,13 @@ async function main() {
       console.log(`正在获取: ${url}`);
       try {
         const content = await fetchUrl(url);
-        const channels = parseM3U(content);
+        
+        let channels;
+        if (url.endsWith('.m3u') || url.endsWith('.m3u8')) {
+          channels = parseM3U(content);
+        } else {
+          channels = parseTXT(content);
+        }
         
         for (const [name, sources] of Object.entries(channels)) {
           if (!allM3UChannels[name]) {
