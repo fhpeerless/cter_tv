@@ -3,18 +3,33 @@ name: Fetch Live Channels
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 * * * *' # 每小时整点触发，降低频率
 
 permissions:
   contents: write
 
+# 禁止并发运行，避免冲突
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   fetch-channels:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Check if completed
+        run: |
+          if [ -f "./main/.completed" ]; then
+            echo "✅ All channels processed, exit"
+            exit 0
+          fi
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -31,10 +46,19 @@ jobs:
         run: node fetch-channels.js
         working-directory: ./main
       
+      - name: Check and filter sources
+        run: node check-sources.js
+        working-directory: ./main
+      
       - name: Commit and push changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add output.json
-          git diff --staged --quiet || git commit -m "Update live channels [skip ci]"
-          git push
+          if git diff --quiet output.json; then
+            echo "✅ output.json无变更，无需提交"
+          else
+            git add output.json
+            git commit -m "Update live channels [skip ci]"
+            git push || (sleep 5 && git push) || (sleep 10 && git push)
+            echo "✅ 已推送更新到仓库"
+          fi
