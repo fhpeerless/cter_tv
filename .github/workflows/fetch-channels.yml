@@ -3,8 +3,7 @@ name: Fetch Live Channels
 on:
   workflow_dispatch: # 保留手动触发
   schedule:
-    - cron: '0 21 * * *' # 北京时间每天5点触发（UTC 21点 = 北京时间次日5点）
-    # 若需UTC时间5点触发，改为：- cron: '0 5 * * *'
+    - cron: '0 5 * * *' # 北京时间每天13点触发（UTC 5点 = 北京时间13点）
 
 permissions:
   contents: write
@@ -25,13 +24,6 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Check if completed
-        run: |
-          if [ -f "./main/.completed" ]; then
-            echo "✅ All channels processed, exit"
-            exit 0
-          fi
-      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -46,7 +38,6 @@ jobs:
       - name: Run fetch channels script
         run: node fetch-channels.js
         working-directory: ./main
-      
       
       - name: Commit and push changes
         run: |
